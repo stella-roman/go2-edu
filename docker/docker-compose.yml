@@ -1,6 +1,6 @@
 services:
-  jh:
-    container_name: go2_humble
+  stella:
+    container_name: go2_stella
     build:
       context: .. # docker build in go2_humble folder
       dockerfile: docker/Dockerfile
@@ -25,6 +25,7 @@ services:
       - /tmp/.docker.xauth:/tmp/.docker.xauth:rwv
       - ../workspace:/workspace
       - ../go2_humble:/root/ros2_ws/src/go2_ros2_project
+      - /dev/bus/usb:/dev/bus/usb
     ipc: host
     pid: host
     privileged: true  # Required for hardware access
