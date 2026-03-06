@@ -1,0 +1,73 @@
+# agent-stella VLM 모듈 설정 파일
+# YAML 내부에서 ${ENV:VAR_NAME} 형태로 환경 변수 참조 가능
+# 우선순위: CLI args > YAML > ENV
+
+app:
+  output_root: "output"  # output/YYYYMMDD_HHMMSS/ 생성
+
+# 카메라 설정 (OAK-D)
+camera:
+  rgb:
+    preview_size: [640, 400]  # VLM에 전송할 프레임 크기
+    sensor_resolution: "THE_1080_P"  # DepthAI 센서 해상도
+    interleaved: false
+    color_order: "BGR"
+    fps: 40  # 카메라 입력 FPS (yolo_test_82.py 유지)
+  
+  depth:
+    enabled: true
+    confidence_threshold: 200  # 0-255
+    median_filter: "MEDIAN_OFF"
+    lr_check: true
+    extended_disparity: true
+    subpixel: true
+
+# 링 버퍼 설정
+ring_buffer:
+  max_seconds: 10  # 최대 시간 창
+  max_frames: 200  # 최대 프레임 수
+  store_format: "jpeg"  # 저장 포맷 (VLM 첨부용)
+  jpeg_quality: 85  # JPEG 품질
+
+# Keyframe 감지 설정
+keyframes:
+  downsample_size: 160  # 장면 변화 계산용 다운샘플 크기 (160×160)
+  scene_change_threshold: 0.12  # 장면 변화 임계값
+  min_keyframe_interval_sec: 2.0  # Keyframe 최소 간격
+  max_pinned_keyframes: 200  # 핀된 keyframe 최대 개수
+
+# 프레임 선택 정책
+selection:
+  max_images_per_turn: 8  # 한 턴에 보낼 최대 이미지 수
+  recent_window_sec: 3  # 최근 프레임 선택 시간 창
+  recent_max_images: 4  # 최근 프레임 최대 장수
+  keyframe_window_sec: 60  # Keyframe 선택 시간 창
+  keyframe_max_images: 4  # Keyframe 최대 장수
+
+# 저장 설정
+storage:
+  fps: 15  # 저장 영상 FPS
+  save_rgb_mp4: true
+  save_depth_overlay_mp4: true
+  depth_overlay:
+    alpha: 0.4  # Depth colormap 블렌딩 알파
+    min_mm: 200  # Depth 최소값 (mm)
+    max_mm: 10000  # Depth 최대값 (mm)
+    colormap: "JET"  # OpenCV colormap 이름
+
+# VLM Provider 설정
+vlm:
+  provider: "gemini"  # gemini 또는 openai
+  system_prompt_language: "English"  # System prompt 언어
+  system_prompt: "You are a helpful vision-language assistant. Answer questions about the images provided."
+  image_source: "depth_overlay"  # "rgb" 또는 "depth_overlay"
+  
+  gemini:
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+    model: "gemini-2.0-flash-exp"
+    api_key: "${ENV:GEMINI_API_KEY}"  # .env 파일에서 자동 로드
+  
+  openai:
+    model: "gpt-4o"
+    api_key: "${ENV:OPENAI_API_KEY}"  # .env 파일에서 자동 로드
+    base_url: ""  # 기본값 사용 (OpenAI 공식 엔드포인트)

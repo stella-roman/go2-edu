@@ -1,0 +1,18 @@
+path: C:/Users/kangj/agent-stella/object_detection/dataset
+
+train: images/train
+val: images/val
+
+nc: 10
+
+names:
+  0: person
+  1: bicycle
+  2: car
+  3: motorcycle
+  4: bus
+  5: train
+  6: truck
+  7: stair_up
+  8: stair_down
+  9: kickboard

@@ -1,0 +1,15 @@
+# agent-stella VLM 모듈 필수 패키지
+
+# 컴퓨터 비전 및 카메라
+opencv-python>=4.8.0
+depthai>=2.24.0  # OAK-D 카메라 지원
+
+# 설정 파일 및 환경 변수
+python-dotenv>=1.0.0
+pyyaml>=6.0
+
+# VLM API 클라이언트
+openai>=1.0.0  # OpenAI/Gemini 호환 API
+
+# NumPy (이미지 처리)
+numpy>=1.24.0

@@ -1,1 +1,29 @@
 go2_humble/unitree_ros2_example/
+
+.env
+agent_logs.txt
+__pycache__/
+*.pyc
+
+# macOS
+*.DS_Store
+
+# Yolo11n train data
+object_detection/coco_minitrain_10k
+object_detection/data
+object_detection/dataset
+object_detection/coco_split.py
+object_detection/split_dataset.py
+object_detection/depth_test.py
+object_detection/depth_test_2.py
+object_detection/change_label.py
+object_detection/choose_coco_extra.py
+object_detection/choose_coco.py
+object_detection/extra_class_copy.py
+object_detection/file_copy.py
+object_detection/label_test.py
+
+# vlm output
+output/
+
+.cache
