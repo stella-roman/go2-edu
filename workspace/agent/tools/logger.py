@@ -2,14 +2,11 @@ from datetime import datetime
 from typing import Optional
 
 # without using llm/vlm models
-def print_and_save_log(
+def save_log(
     question: str,
     answer: str,
     filename: Optional[str] = "agent_logs.txt",
 ):
-    # --- print to terminal ---
-    print(f"STELLA: {answer}")
-    
     # --- log to agent_logs.txt ---
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 

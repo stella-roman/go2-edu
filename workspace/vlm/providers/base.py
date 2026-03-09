@@ -15,6 +15,7 @@ class ImageInput:
 class VLMResult:
     text: str
     usage: Optional[Dict[str, Any]] = None
+    inference_time: Optional[float] = None
 
 
 class VLMProvider(Protocol):

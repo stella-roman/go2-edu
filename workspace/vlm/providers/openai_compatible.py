@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -51,7 +52,11 @@ class OpenAICompatibleProvider:
 
         messages.append({"role": "user", "content": user_content})
 
+        start_time = time.perf_counter()
         resp = self._client.chat.completions.create(model=self.model, messages=messages)
+        end_time = time.perf_counter()
+        inference_time = end_time - start_time
+
         msg = resp.choices[0].message.content or ""
         usage: Optional[Dict[str, Any]] = None
         try:
@@ -63,5 +68,5 @@ class OpenAICompatibleProvider:
                 }
         except Exception:
             usage = None
-        return VLMResult(text=msg, usage=usage)
+        return VLMResult(text=msg, usage=usage, inference_time=inference_time)
 

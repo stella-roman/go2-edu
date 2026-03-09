@@ -8,7 +8,7 @@ app:
 # 카메라 설정 (OAK-D)
 camera:
   rgb:
-    preview_size: [640, 400]  # VLM에 전송할 프레임 크기
+    preview_size: [640, 360]  # VLM에 전송할 프레임 크기 (16:9 권장)
     sensor_resolution: "THE_1080_P"  # DepthAI 센서 해상도
     interleaved: false
     color_order: "BGR"
@@ -16,11 +16,11 @@ camera:
   
   depth:
     enabled: true
-    confidence_threshold: 200  # 0-255
+    confidence_threshold: 240  # 0-255 (높일수록 저신뢰 depth 제거)
     median_filter: "MEDIAN_OFF"
     lr_check: true
-    extended_disparity: true
-    subpixel: true
+    extended_disparity: false
+    subpixel: false
 
 # 링 버퍼 설정
 ring_buffer:
@@ -49,6 +49,7 @@ storage:
   fps: 15  # 저장 영상 FPS
   save_rgb_mp4: true
   save_depth_overlay_mp4: true
+  save_depth_mp4: true  # depth 컬러맵 전용 영상 저장 (video/depth.mp4)
   depth_overlay:
     alpha: 0.4  # Depth colormap 블렌딩 알파
     min_mm: 200  # Depth 최소값 (mm)
@@ -57,10 +58,32 @@ storage:
 
 # VLM Provider 설정
 vlm:
-  provider: "gemini"  # gemini 또는 openai
+  provider: "openai"  # gemini 또는 openai
   system_prompt_language: "English"  # System prompt 언어
-  system_prompt: "You are a helpful vision-language assistant. Answer questions about the images provided."
-  image_source: "depth_overlay"  # "rgb" 또는 "depth_overlay"
+  system_prompt: |
+    You are STELLA, an assistive navigation assistant for a blind user.
+    Always respond in short, direct English (1-3 sentences).
+    Prioritize safety and actionable spatial instructions.
+
+    Critical rules:
+    - You CAN interpret the images provided with the user's request.
+    - Do NOT use visual verbs like "look", "see", "watch", "notice". Instead say "The scene contains..." or "In front of you there is...".
+    - Avoid vague phrases like "go there" or "over there".
+    - Prefer: "Move forward X centimeters", "Turn slightly left/right", "Stop".
+    - If you are uncertain, ask ONE concise clarification question.
+
+    Note:
+    - Depth-based guidance (stop/near warnings, obstacle/door alerts) may be provided separately.
+  scene_prompt: |
+    You are a vision assistant for a blind user.
+    Describe the current scene from the provided camera images.
+    Output short, direct English (2-5 sentences).
+
+    Rules:
+    - Do NOT say "I see". Use "The scene contains..." / "In front of you..." phrasing.
+    - Mention the most important objects and their approximate positions (left/center/right, near/far) without inventing exact distances.
+    - If the images are unclear or missing, say so and ask ONE clarifying question.
+  image_source: "rgb"  # "rgb" 또는 "depth_overlay"
   
   gemini:
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
@@ -68,6 +91,48 @@ vlm:
     api_key: "${ENV:GEMINI_API_KEY}"  # .env 파일에서 자동 로드
   
   openai:
-    model: "gpt-4o"
+    model: "gpt-4o-mini"
     api_key: "${ENV:OPENAI_API_KEY}"  # .env 파일에서 자동 로드
     base_url: ""  # 기본값 사용 (OpenAI 공식 엔드포인트)
+
+# Depth 기반 Find/Guide 내비게이션(실험적)
+navigation:
+  depth_features:
+    # ROI fractions: [x0, x1, y0, y1] in 0..1
+    roi:
+      left: [0.0, 0.33, 0.2, 0.8]
+      center: [0.33, 0.67, 0.2, 0.8]
+      right: [0.67, 1.0, 0.2, 0.8]
+    statistic: "p10"  # "p10" 또는 "median"
+    ema_alpha: 0.7
+    min_valid_ratio: 0.01
+
+  find:
+    near_warn_cm: 50
+    stop_cm: 30
+
+  guide:
+    obstacle_threshold_cm: 80
+    door_announce_cm: 30
+    door_tolerance_cm: 10
+
+  guidance:
+    hz: 8.0
+    cooldown_sec: 2.0
+    required_consecutive: 3
+    label_refresh_sec: 1.0
+    distance_round_step_cm: 5
+    find_guidance_cooldown_sec: 6.0
+    # If the labeler briefly loses the target, keep "visible" for this grace window
+    # to avoid noisy "Searching..." spam.
+    find_visible_grace_sec: 2.5
+    # Only say "Searching..." after this many consecutive visible=false results.
+    find_search_required_false_streak: 3
+    find_moving_away_delta_cm: 15.0
+    find_moving_away_window_sec: 2.0
+    find_moving_away_cooldown_sec: 6.0
+
+  labeler:
+    # Use only ring buffer (recent frames) for low-rate labeling
+    recent_window_sec: 1.5
+    max_images: 4

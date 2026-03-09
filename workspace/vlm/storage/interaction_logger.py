@@ -20,6 +20,7 @@ class InteractionLogger:
         provider: str,
         model: str,
         usage: Optional[Dict[str, Any]] = None,
+        inference_time: Optional[float] = None,
         extra: Optional[Dict[str, Any]] = None,
     ) -> None:
         record: Dict[str, Any] = {
@@ -32,6 +33,10 @@ class InteractionLogger:
         }
         if usage:
             record["usage"] = usage
+            
+        if inference_time is not None:
+            record["inference_time"] = inference_time
+
         if extra:
             record["extra"] = extra
         self.path.parent.mkdir(parents=True, exist_ok=True)

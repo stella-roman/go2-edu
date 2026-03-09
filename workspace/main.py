@@ -1,17 +1,14 @@
 import re
 import random
 import threading
-
 from agent.tools.stt import listen
 from datetime import datetime
-from agent.tools.logger import print_and_save_log
-from agent.services.agent_runner import ask_agent, ask_vision
-
+from agent.tools.logger import save_log
+from agent.services.agent_runner import ask_agent
+from agent.services.vision_runner import ask_vision
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
-
-from agent.tools.tts import Go2Speaker   # TTS node
-
+from workspace.agent.tools.speech_generation import Go2Speaker
 
 WAKE_RESPONSES = [
     "Yes, sir?",
@@ -26,10 +23,6 @@ SHUTDOWN_RESPONSES = [
     "Powering off. Until next time, sir."
 ]
 
-FRAME_INTERVAL_SECONDS = 2
-VIDEO_PATH = "input/sample.mp4"
-
-
 def is_vision_question(text: str) -> bool:
     vision_keywords = [
         "see", "what do you see", "what can you see", "show me",
@@ -38,12 +31,7 @@ def is_vision_question(text: str) -> bool:
     ]
     return any(keyword in text.lower() for keyword in vision_keywords)
 
-
 def main():
-
-    # =========================
-    # ROS2 INIT
-    # =========================
     rclpy.init()
 
     speaker = Go2Speaker()
@@ -54,9 +42,6 @@ def main():
     spin_thread = threading.Thread(target=executor.spin, daemon=True)
     spin_thread.start()
 
-    # =========================
-    # START
-    # =========================
     print("\n=== Starting chat with Stella ===")
     print("Type your question below. (Type 'shut down' or 'power off' to quit)")
 
@@ -66,92 +51,51 @@ def main():
         f.write(f"========== STELLA ACTIVATED ========== {now}\n")
 
     while True:
-
         user_input = input("\nYou: ").strip()
         normalized = user_input.lower().strip()
 
-        # =========================
-        # Shutdown
-        # =========================
+        # Handle shutdown commands (terminate the agent)
         if "power off" in normalized or "shutdown" in normalized or "shut down" in normalized:
-
             print("=====================================")
-
             response = random.choice(SHUTDOWN_RESPONSES)
-
-            print_and_save_log(question=normalized, answer=response)
-
+            save_log(question=normalized, answer=response)
             speaker.speak(response)
-
             break
 
-        # =========================
-        # Wake word
-        # =========================
+        # Handle wake-only inputs (respond without executing a command)
         if "stella" in normalized:
-
             response = random.choice(WAKE_RESPONSES)
-
-            print_and_save_log(question=normalized, answer=response)
-
+            save_log(question=normalized, answer=response)
             speaker.speak(response)
-
             continue
 
+        # Remove the wake word ("stella") from the prompt before sending it
         cleaned_input = re.sub(
             r"\bstella\b", "", user_input, flags=re.IGNORECASE
         ).strip()
 
         if not cleaned_input:
-
             response = "I'm listening, sir."
-
-            print_and_save_log(question=normalized, answer=response)
-
+            save_log(question=normalized, answer=response)
             speaker.speak(response)
-
             continue
 
-        # =========================
         # Agent Call
-        # =========================
         try:
-
             if is_vision_question(cleaned_input):
-
-                response = "Analyzing video... please wait."
-
-                print_and_save_log(question=normalized, answer=response)
-
-                speaker.speak(response)
-
-                answer = ask_vision(
-                    question=cleaned_input,
-                    video_path=VIDEO_PATH,
-                    frame_interval=FRAME_INTERVAL_SECONDS
-                )
-
-                print("STELLA:", answer)
-
-                speaker.speak(answer)
-
+                ask_vision(question=cleaned_input)
+                # print("STELLA:", answer)
+                # print_and_speak(answer)
             else:
-
                 response = ask_agent(cleaned_input)
-
-                print_and_save_log(question=normalized, answer=response)
-
+                save_log(question=normalized, answer=response)
                 speaker.speak(response)
 
         except Exception as e:
             print("Error:", e)
 
-    # =========================
-    # 종료
-    # =========================
     speaker.destroy_node()
     rclpy.shutdown()
-
 
 if __name__ == "__main__":
     main()

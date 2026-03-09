@@ -20,46 +20,67 @@ class VideoWriters:
     depth_overlay_path: Optional[Path]
     fps: int
     frame_size: Tuple[int, int]  # (w, h)
+    depth_path: Optional[Path] = None
 
     _rgb_writer: Optional[cv2.VideoWriter] = None
+    _depth_overlay_writer: Optional[cv2.VideoWriter] = None
     _depth_writer: Optional[cv2.VideoWriter] = None
-    _last_rgb_write: float = 0.0
-    _last_depth_write: float = 0.0
+    # Use a single clock to keep rgb/depth_overlay in sync (same tick => same frame count progression)
+    _last_write: float = 0.0
 
     def open(self) -> None:
         w, h = self.frame_size
         if self.rgb_path is not None:
             self._rgb_writer = cv2.VideoWriter(str(self.rgb_path), _fourcc(), self.fps, (w, h))
         if self.depth_overlay_path is not None:
-            self._depth_writer = cv2.VideoWriter(
+            self._depth_overlay_writer = cv2.VideoWriter(
                 str(self.depth_overlay_path), _fourcc(), self.fps, (w, h)
             )
+        if self.depth_path is not None:
+            self._depth_writer = cv2.VideoWriter(str(self.depth_path), _fourcc(), self.fps, (w, h))
 
     def close(self) -> None:
         if self._rgb_writer is not None:
             self._rgb_writer.release()
+        if self._depth_overlay_writer is not None:
+            self._depth_overlay_writer.release()
         if self._depth_writer is not None:
             self._depth_writer.release()
 
-    def maybe_write_rgb(self, frame_bgr: np.ndarray) -> bool:
-        if self._rgb_writer is None:
+    def maybe_write_pair(
+        self,
+        *,
+        rgb_bgr: Optional[np.ndarray] = None,
+        depth_overlay_bgr: Optional[np.ndarray] = None,
+        depth_bgr: Optional[np.ndarray] = None,
+    ) -> bool:
+        if self._rgb_writer is None and self._depth_overlay_writer is None and self._depth_writer is None:
             return False
+
         now = time.monotonic()
-        if now - self._last_rgb_write < (1.0 / float(self.fps)):
+        if now - self._last_write < (1.0 / float(self.fps)):
             return False
-        self._last_rgb_write = now
-        self._rgb_writer.write(frame_bgr)
+        self._last_write = now
+
+        if rgb_bgr is not None and self._rgb_writer is not None:
+            self._rgb_writer.write(rgb_bgr)
+        if depth_overlay_bgr is not None and self._depth_overlay_writer is not None:
+            self._depth_overlay_writer.write(depth_overlay_bgr)
+        if depth_bgr is not None and self._depth_writer is not None:
+            self._depth_writer.write(depth_bgr)
         return True
 
+    def maybe_write_rgb(self, frame_bgr: np.ndarray) -> bool:
+        # Kept for backward compatibility; prefer maybe_write_pair() for sync.
+        return self.maybe_write_pair(rgb_bgr=frame_bgr)
+
     def maybe_write_depth_overlay(self, overlay_bgr: np.ndarray) -> bool:
-        if self._depth_writer is None:
-            return False
-        now = time.monotonic()
-        if now - self._last_depth_write < (1.0 / float(self.fps)):
-            return False
-        self._last_depth_write = now
-        self._depth_writer.write(overlay_bgr)
-        return True
+        # Kept for backward compatibility; prefer maybe_write_pair() for sync.
+        return self.maybe_write_pair(depth_overlay_bgr=overlay_bgr)
+
+    def maybe_write_depth(self, depth_bgr: np.ndarray) -> bool:
+        # Kept for backward compatibility; prefer maybe_write_pair() for sync.
+        return self.maybe_write_pair(depth_bgr=depth_bgr)
 
 
 def depth_to_colormap(

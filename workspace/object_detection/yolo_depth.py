@@ -1,14 +1,17 @@
 import cv2
+import sys
 import depthai as dai
-import numpy as np
 import time
 from pathlib import Path
 
-nnPath = str((Path(__file__).parent / Path('models/train30_openvino_2022.1_6shave.blob')).resolve().absolute())
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from agent.tools.speech_generation import play_wav, print_and_speak
+
+nnPath = str((Path(__file__).parent / Path('models/best.blob')).resolve().absolute())
 
 labelMap = [
-    "person",   "bicycle",      "car",          "motorcycle",   "bus",
-    "train",    "truck",        "stiar_up",     "stair_down",   "kickboard"
+    "person",   "bicycle",      "car",          "motorcycle",
+    "train",    "stiar_up",     "stair_down",   "kickboard"
 ]
 
 pipeline = dai.Pipeline()
@@ -61,55 +64,71 @@ spatialDetectionNetwork.out.link(xoutNN.input)
 
 # ---- Run ----
 with dai.Device(pipeline) as device:
-
+    start_time = time.time()
     qRgb = device.getOutputQueue("rgb", 4, False)
     qDet = device.getOutputQueue("detections", 4, False)
 
-    last_print_time = time.time()
+    last_print_time = start_time
+    print("[LAST PRINT TIME]", last_print_time)
     best_detection = None
     best_confidence = 0
+    best_label = None
+    best_distance = 0
 
     while True:
-        inRgb = qRgb.get()
-        inDet = qDet.get()
+        inRgb = qRgb.tryGet()
+
+        if inRgb is None:
+            continue
 
         frame = inRgb.getCvFrame()
 
-        for detection in inDet.detections:
+        inDet = qDet.tryGet()
 
-            x1 = int(detection.xmin * frame.shape[1])
-            y1 = int(detection.ymin * frame.shape[0])
-            x2 = int(detection.xmax * frame.shape[1])
-            y2 = int(detection.ymax * frame.shape[0])
+        if inDet is not None:
+            for detection in inDet.detections:
+                x1 = int(detection.xmin * frame.shape[1])
+                y1 = int(detection.ymin * frame.shape[0])
+                x2 = int(detection.xmax * frame.shape[1])
+                y2 = int(detection.ymax * frame.shape[0])
 
-            label = labelMap[detection.label]
-            confidence = detection.confidence * 100
+                label = labelMap[detection.label]
+                confidence = detection.confidence * 100
 
-            distance = int(detection.spatialCoordinates.z)
+                distance = int(detection.spatialCoordinates.z)
 
-            cv2.rectangle(frame, (x1,y1), (x2,y2), (0,0,255), 2)
+                cv2.rectangle(frame, (x1,y1), (x2,y2), (0,0,255), 2)
 
-            cv2.putText(frame,
-                        f"{label} {confidence:.1f}%",
-                        (x1+10, y1+20),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,(0,255,0),1)
+                cv2.putText(frame,
+                            f"{label} {confidence:.1f}%",
+                            (x1+10, y1+20),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.5,(0,255,0),1)
 
-            cv2.putText(frame,
-                        f"Dist: {distance/1000:.2f} m",
-                        (x1+10, y1+40),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,(255,255,0),1)
-            
-            if confidence > best_confidence:
-                best_confidence = confidence
-                best_detection = f"{label} | {confidence:.1f}% | {distance/1000:.2f} m"
+                cv2.putText(frame,
+                            f"Dist: {distance/1000:.2f} m",
+                            (x1+10, y1+40),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.5,(255,255,0),1)
+                
+                if confidence > best_confidence:
+                    best_confidence = confidence
+                    best_label = label
+                    best_distance = distance/1000
+                    best_detection = f"{label} | {confidence:.1f}% | {distance/1000:.2f} m"
 
         current_time = time.time()
-        if current_time - last_print_time >= 1.0:
+        print("[CURRENT TIME]", current_time)
 
+        if current_time - last_print_time >= 1.0:
             if best_detection is not None:
                 print(best_detection)
+                temp_path = f"agent/tools/emergency_audios/temp.wav"
+                print(f"STELLA: {best_label} detected.")
+                print_and_speak(f"{best_distance:.1f} meters away.", temp_path)
+                wav_path = f"agent/tools/emergency_audios/{best_label}.wav"
+                play_wav(wav_path)
+                play_wav(temp_path)
             else:
                 print("Nothing Detected")
 
