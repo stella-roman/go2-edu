@@ -29,7 +29,9 @@ from vlm.session import Session
 from vlm.storage.interaction_logger import InteractionLogger
 from vlm.storage.run_dir import create_run_dirs
 from vlm.storage.video_writer import VideoWriters
-from agent.tools.speech_generation import print_and_speak
+import rclpy
+from rclpy.executors import MultiThreadedExecutor
+from workspace.agent.tools.speech_generation import Go2Speaker
 
 
 def _make_provider(cfg: Dict[str, Any]) -> OpenAICompatibleProvider:
@@ -150,6 +152,16 @@ def _is_scene_query(user_text: str) -> bool:
 
 
 def ask_vision(question) -> None:
+    rclpy.init()
+
+    speaker = Go2Speaker()
+
+    executor = MultiThreadedExecutor()
+    executor.add_node(speaker)
+
+    spin_thread = threading.Thread(target=executor.spin, daemon=True)
+    spin_thread.start()
+
     args = parse_args()
     loaded = load_config(args)
     cfg = loaded.config
@@ -259,7 +271,7 @@ def ask_vision(question) -> None:
 
     def _on_utterance(text: str) -> None:
         # Guidance messages are intentionally short and English-only.
-        print_and_speak(f"{text}")
+        speaker.speak(f"{text}")
 
     guidance = GuidanceLoop(
         depth_state=depth_state,
@@ -364,25 +376,25 @@ def ask_vision(question) -> None:
             if low == "idle":
                 nav_state.mode = NavMode.idle
                 nav_state.find_target = None
-                print_and_speak("Navigation mode set to idle.")
+                speaker.speak("Navigation mode set to idle.")
                 continue
             if low.startswith("find"):
                 parts = user_text.split(maxsplit=1)
                 target = parts[1].strip() if len(parts) > 1 else ""
                 if not target:
-                    print_and_speak("Please specify a target, e.g., 'find keys'.")
+                    speaker.speak("Please specify a target, e.g., 'find keys'.")
                     continue
                 nav_state.mode = NavMode.find
                 nav_state.find_target = target
                 label_cache["find_target"] = target
                 label_cache["find_last_ts"] = 0.0
-                print_and_speak(f"Find mode enabled. Target = {target!r}")
+                speaker.speak(f"Find mode enabled. Target = {target!r}")
                 continue
             if low == "guide":
                 nav_state.mode = NavMode.guide
                 nav_state.find_target = None
                 label_cache["guide_last_ts"] = 0.0
-                print_and_speak("Guide mode enabled.")
+                speaker.speak("Guide mode enabled.")
                 continue
 
             # Natural-language routing (A: rule-based router)
@@ -390,18 +402,18 @@ def ask_vision(question) -> None:
             if routed["intent"] == "idle":
                 nav_state.mode = NavMode.idle
                 nav_state.find_target = None
-                print_and_speak("Navigation mode set to idle.")
+                speaker.speak("Navigation mode set to idle.")
                 continue
             if routed["intent"] == "guide":
                 nav_state.mode = NavMode.guide
                 nav_state.find_target = None
                 label_cache["guide_last_ts"] = 0.0
-                print_and_speak("Guide mode enabled.")
+                speaker.speak("Guide mode enabled.")
                 continue
             if routed["intent"] == "find":
                 target = routed.get("target") or ""
                 if not target:
-                    print_and_speak("Please specify a target, e.g., 'find keys'.")
+                    speaker.speak("Please specify a target, e.g., 'find keys'.")
                     continue
                 already = nav_state.mode == NavMode.find and (nav_state.find_target or "").lower() == target.lower()
                 nav_state.mode = NavMode.find
@@ -413,24 +425,24 @@ def ask_vision(question) -> None:
                     label_cache["find_last_seen_ts"] = 0.0
                     label_cache["find_false_streak"] = 0
                     label_cache["find_direction"] = "unknown"
-                    print_and_speak(f"Find mode enabled. Target = {target!r}")
-                    print_and_speak(f"Searching for {target}. Slowly pan left and right.")
+                    speaker.speak(f"Find mode enabled. Target = {target!r}")
+                    speaker.speak(f"Searching for {target}. Slowly pan left and right.")
                 else:
-                    print_and_speak(f"Find mode is already active for {target!r}.")
+                    speaker.speak(f"Find mode is already active for {target!r}.")
                 continue
 
             # While navigation mode is active, treat generic questions as navigation status.
             if nav_state.mode == NavMode.find and nav_state.find_target:
                 vis, direction, target, should_search = _get_find_label()
                 if should_search:
-                    print_and_speak(f"Searching for {target}. Slowly pan left and right.")
+                    speaker.speak(f"Searching for {target}. Slowly pan left and right.")
                 else:
                     if direction in {"left", "right"}:
-                        print_and_speak(f"{target} is to your {direction}. Turn slightly {direction} and move forward slowly.")
+                        speaker.speak(f"{target} is to your {direction}. Turn slightly {direction} and move forward slowly.")
                     elif direction == "center":
-                        print_and_speak(f"{target} is ahead. Move forward slowly.")
+                        speaker.speak(f"{target} is ahead. Move forward slowly.")
                     else:
-                        print_and_speak(f"{target} is ahead. Move slowly and keep the camera steady.")
+                        speaker.speak(f"{target} is ahead. Move slowly and keep the camera steady.")
                 continue
 
             frames, frame_ids = selector.select()
@@ -446,7 +458,7 @@ def ask_vision(question) -> None:
 
             if not images:
                 # Avoid calling the model with no images for vision questions.
-                print_and_speak("No camera frames are available yet. Please wait a moment and try again.")
+                speaker.speak("No camera frames are available yet. Please wait a moment and try again.")
                 logger.log_turn(
                     user_text=user_text,
                     assistant_text="No camera frames are available yet. Please wait a moment and try again.",
@@ -468,7 +480,7 @@ def ask_vision(question) -> None:
             )
 
             answer = result.text.strip()
-            print_and_speak(f"{answer}")
+            speaker.speak(f"{answer}")
 
             # Update session (store text only)
             session.add_user(user_text)
@@ -501,3 +513,6 @@ def ask_vision(question) -> None:
             writers.close()
         except Exception as e:
             print(f"\n[WARNING] 비디오 파일 닫기 중 오류: {e}")
+
+    speaker.destroy_node()
+    rclpy.shutdown()
